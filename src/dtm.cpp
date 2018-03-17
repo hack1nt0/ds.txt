@@ -7,16 +7,18 @@
 using namespace Rcpp;
 using namespace std;
 
-S4 _C_dtm(std::vector<std::vector<std::string> >& xx, std::vector<int>& ngram, bool tf, bool idf) {
+S4 _C_dtm(std::vector<std::vector<std::string> >& xx, std::vector<int>& ngram,
+          bool tf, bool idf) {
+
     int n = xx.size();
     vector<vector<string> >* xp = &xx;
-    if (!(ngram.size() == 1 && ngram[0] == 1)) {
+    if (!(ngram[0] == 1 && ngram[1] == 2)) {
         int from = ngram[0];
         int to   = ngram[1];
         xp = new vector<vector<string> >(n);
         vector<vector<string> >& x = *xp;
         for (int i = 0; i < n; ++i) {
-            for (int j = 0; j < xx[i].size(); ++j) {
+            for (int j = 0; j + from <= xx[i].size(); ++j) {
                 stringbuf sb;
                 for (int k = j; k < j + from; ++k)
                     sb.sputn(xx[i][k].c_str(), xx[i][k].size());
@@ -30,13 +32,6 @@ S4 _C_dtm(std::vector<std::vector<std::string> >& xx, std::vector<int>& ngram, b
         }
     }
     vector<vector<string> >& x = *xp;
-    for (int i = 0; i < x.size(); ++i) {
-        for (int j = 0; j < x[i].size(); ++j)
-            cout << x[i][j] << " ";
-        cout << endl;
-    }
-    cout << "-----------" << endl;
-
     vector<vector<int> > widx;
     map<string, int> code;
     vector<string> word;
@@ -127,13 +122,13 @@ S4 _C_dtm(std::vector<std::vector<std::string> >& xx, std::vector<int>& ngram, b
                     idx[p] = widx[i][j];
                     val[p] = 1;
                     if (idf)
-                        val[p - 1] *= log((double)n / df[i]);
+                        val[p - 1] *= log(1 + (double)n / df[i]);
                 }
                 else
                     ++val[p];
             }
             if (idf)
-                val[p] *= log((double)n / df[i]);
+                val[p] *= log(1 + (double)n / df[i]);
         }
         S4 ans("dtm");
         ans.slot("p") = ptr;
@@ -151,8 +146,8 @@ RcppExport SEXP C_dtm(SEXP xxSEXP, SEXP ngramSEXP, SEXP tfSEXP, SEXP idfSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< std::vector<std::vector<std::string> > >::type xx(xxSEXP);
-    Rcpp::traits::input_parameter< std::vector<int> >::type ngram(ngramSEXP);
+    Rcpp::traits::input_parameter< std::vector<std::vector<std::string> >& >::type xx(xxSEXP);
+    Rcpp::traits::input_parameter< std::vector<int>& >::type ngram(ngramSEXP);
     Rcpp::traits::input_parameter< bool >::type tf(tfSEXP);
     Rcpp::traits::input_parameter< bool >::type idf(idfSEXP);
     rcpp_result_gen = Rcpp::wrap(_C_dtm(xx, ngram, tf, idf));
