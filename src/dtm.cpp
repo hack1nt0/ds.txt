@@ -35,7 +35,7 @@ S4 _C_dtm(std::vector<std::vector<std::string> >& xx, std::vector<int>& ngram,
     vector<vector<int> > widx;
     map<string, int> code;
     vector<string> word;
-    IntegerVector length(n);
+    IntegerVector dl(n);
     if (!tf) {
         for (int i = 0; i < n; ++i) {
             sort(x[i].begin(), x[i].end());
@@ -56,7 +56,7 @@ S4 _C_dtm(std::vector<std::vector<std::string> >& xx, std::vector<int>& ngram,
                 else
                     widx[id].push_back(i);
             }
-            length[i] = x[i].size();
+            dl[i] = x[i].size();
         }
         int m = widx.size();
         IntegerVector ptr(m + 1); ptr[0] = 0;
@@ -76,7 +76,7 @@ S4 _C_dtm(std::vector<std::vector<std::string> >& xx, std::vector<int>& ngram,
         ans.slot("x") = val;
         ans.slot("Dim") = IntegerVector::create(n, m);
         ans.slot("Dimnames") = List::create(R_NilValue, word);
-        ans.slot("length") = length;
+        ans.slot("dl") = dl;
         ans.slot("df") = df;
         return ans;
     } else {
@@ -96,7 +96,7 @@ S4 _C_dtm(std::vector<std::vector<std::string> >& xx, std::vector<int>& ngram,
                 else
                     widx[id].push_back(i);
             }
-            length[i] = x[i].size();
+            dl[i] = x[i].size();
         }
         int m = widx.size();
         IntegerVector ptr(m + 1); ptr[0] = 0;
@@ -136,7 +136,7 @@ S4 _C_dtm(std::vector<std::vector<std::string> >& xx, std::vector<int>& ngram,
         ans.slot("x") = val;
         ans.slot("Dim") = IntegerVector::create(n, m);
         ans.slot("Dimnames") = List::create(R_NilValue, word);
-        ans.slot("length") = length;
+        ans.slot("dl") = dl;
         ans.slot("df") = df;
         return ans;
     }
@@ -152,5 +152,31 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type idf(idfSEXP);
     rcpp_result_gen = Rcpp::wrap(_C_dtm(xx, ngram, tf, idf));
     return rcpp_result_gen;
+END_RCPP
+}
+
+void _C_update_dtm_subset(S4 x) {
+    IntegerVector ptr = x.slot("p");
+    IntegerVector idx = x.slot("i");
+    IntegerVector dim = x.slot("Dim");
+    int nrow = dim[0], ncol = dim[1];
+    IntegerVector df(ncol);
+    IntegerVector dl(nrow, 0);
+    for (int i = 0; i < ncol; ++i) {
+        df[i] = ptr[i + 1] - ptr[i];
+        for (int j = ptr[i]; j < ptr[i + 1]; ++j)
+            ++dl[idx[j]];
+    }
+    x.slot("dl") = dl;
+    x.slot("df") = df;
+}
+
+RcppExport SEXP C_update_dtm_subset(SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< S4 >::type x(xSEXP);
+    _C_update_dtm_subset(x);
+    return R_NilValue;
 END_RCPP
 }
