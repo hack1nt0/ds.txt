@@ -18,12 +18,13 @@ RObject _C_dtm(Text& train, int gfrom, int gto,
     int m = 0;
     map<string, int> code;
     vector<string> word;
+    IntegerVector* df = NULL;
     for (int t = 0; t < 2; ++t) {
         if (n[t] == 0) continue;
-        xp[t] = new vector<vector<string> >(n[t]);
         if (!(gfrom == 1 && gto == 2)) {
-            vector<vector<string> >& newx = *xp[t];
-            vector<vector<string> >& oldx = t == 0 ? train : test;
+            xp[t] = new Text(n[t], vector<string>());
+            Text& newx = *xp[t];
+            Text& oldx = t == 0 ? train : test;
             for (int i = 0; i < n[t]; ++i) {
                 for (int j = 0; j + gfrom <= oldx[i].size(); ++j) {
                     stringbuf sb;
@@ -71,17 +72,19 @@ RObject _C_dtm(Text& train, int gfrom, int gto,
                     }
                 }
             }
-            if (t == 0) m = widx.size();
+            if (t == 0) {
+                m = widx.size();
+                df = new IntegerVector(m);
+            }
             IntegerVector ptr(m + 1); ptr[0] = 0;
             for (int i = 0; i < m; ++i)
                 ptr[i + 1] = ptr[i] + widx[i].size();
             int nnz = ptr[m];
             IntegerVector idx(nnz);
             DoubleVector val(nnz, 1.0);
-            IntegerVector df(nnz);
             for (int i = 0; i < m; ++i) {
                 memcpy(idx.begin() + ptr[i], widx[i].data(), sizeof(int) * widx[i].size());
-                df[i] = widx[i].size();
+                df->operator[](i) = widx[i].size();
             }
             S4 res("dtm");
             res.slot("p") = ptr;
@@ -90,7 +93,7 @@ RObject _C_dtm(Text& train, int gfrom, int gto,
             res.slot("Dim") = IntegerVector::create(n[t], m);
             res.slot("Dimnames") = List::create(R_NilValue, word);
             res.slot("dl") = dl;
-            res.slot("df") = df;
+            res.slot("df") = *df;
             ans[t] = res;
         } else {
             for (int i = 0; i < n[t]; ++i) {
@@ -119,16 +122,18 @@ RObject _C_dtm(Text& train, int gfrom, int gto,
                 }
                 dl[i] = x[i].size();
             }
-            if (t == 0) m = widx.size();
+            if (t == 0) {
+                m = widx.size();
+                df = new IntegerVector(m);
+            }
             IntegerVector ptr(m + 1); ptr[0] = 0;
-            IntegerVector df(m);
             for (int i = 0; i < m; ++i) {
                 int uniques = 1;
                 for (int j = 1; j < widx[i].size(); ++j)
                     if (widx[i][j] != widx[i][j - 1])
                         ++uniques;
                     ptr[i + 1] = ptr[i] + uniques;
-                    df[i] = uniques;
+                    df->operator[](i) = uniques;
             }
             int nnz = ptr[m];
             IntegerVector idx(nnz);
@@ -143,13 +148,13 @@ RObject _C_dtm(Text& train, int gfrom, int gto,
                         idx[p] = widx[i][j];
                         val[p] = 1;
                         if (idf)
-                            val[p - 1] *= log(1 + (double)n[t] / df[i]);
+                            val[p - 1] *= log(1 + (double)n[t] / df->operator[](i));
                     }
                     else
                         ++val[p];
                 }
                 if (idf)
-                    val[p] *= log(1 + (double)n[t] / df[i]);
+                    val[p] *= log(1 + (double)n[t] / df->operator[](i));
             }
             S4 res("dtm");
             res.slot("p") = ptr;
@@ -158,7 +163,7 @@ RObject _C_dtm(Text& train, int gfrom, int gto,
             res.slot("Dim") = IntegerVector::create(n[t], m);
             res.slot("Dimnames") = List::create(R_NilValue, word);
             res.slot("dl") = dl;
-            res.slot("df") = df;
+            res.slot("df") = *df;
             ans[t] = res;
         }
     }
