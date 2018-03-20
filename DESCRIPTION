@@ -10,6 +10,6 @@ License: What license is it under?
 Encoding: UTF-8
 LazyData: true
 Imports: Rcpp (>= 0.12.7)
-LinkingTo: Rcpp
+LinkingTo: Rcpp, foreach
 Depends: 
     Matrix

@@ -6,12 +6,11 @@
 using namespace Rcpp;
 
 // rcpp_hello
-List rcpp_hello();
+void rcpp_hello();
 RcppExport SEXP ds_txt_rcpp_hello() {
 BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(rcpp_hello());
-    return rcpp_result_gen;
+    rcpp_hello();
+    return R_NilValue;
 END_RCPP
 }

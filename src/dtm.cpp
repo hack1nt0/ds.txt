@@ -7,152 +7,179 @@
 using namespace Rcpp;
 using namespace std;
 
-S4 _C_dtm(std::vector<std::vector<std::string> >& xx, std::vector<int>& ngram,
-          bool tf, bool idf) {
+typedef std::vector<std::vector<std::string> > Text;
 
-    int n = xx.size();
-    vector<vector<string> >* xp = &xx;
-    if (!(ngram[0] == 1 && ngram[1] == 2)) {
-        int from = ngram[0];
-        int to   = ngram[1];
-        xp = new vector<vector<string> >(n);
-        vector<vector<string> >& x = *xp;
-        for (int i = 0; i < n; ++i) {
-            for (int j = 0; j + from <= xx[i].size(); ++j) {
-                stringbuf sb;
-                for (int k = j; k < j + from; ++k)
-                    sb.sputn(xx[i][k].c_str(), xx[i][k].size());
-                x[i].push_back(sb.str()); //todo
-                for (int len = from + 1; len < to; ++len) {
-                    if (j + len > xx[i].size()) break;
-                    sb.sputn(xx[i][j + len - 1].c_str(), xx[i][j + len - 1].size());
-                    x[i].push_back(sb.str()); //todo
-                }
-            }
-        }
-    }
-    vector<vector<string> >& x = *xp;
-    vector<vector<int> > widx;
+RObject _C_dtm(Text& train, int gfrom, int gto,
+          bool tf, bool idf, Text& test) {
+
+    List ans(2);
+    Text* xp[2] = {&train, &test};
+    int n[2] = {(int)train.size(), (int)test.size()};
+    int m = 0;
     map<string, int> code;
     vector<string> word;
-    IntegerVector dl(n);
-    if (!tf) {
-        for (int i = 0; i < n; ++i) {
-            sort(x[i].begin(), x[i].end());
-            auto t = std::unique(x[i].begin(), x[i].end());
-            for (auto p = x[i].begin(); p != t; ++p) {
-                int id = -1;
-                if (code.count(*p) == 0) {
-                    id = code.size();
-                    code[*p] = id;
+    for (int t = 0; t < 2; ++t) {
+        if (n[t] == 0) continue;
+        xp[t] = new vector<vector<string> >(n[t]);
+        if (!(gfrom == 1 && gto == 2)) {
+            vector<vector<string> >& newx = *xp[t];
+            vector<vector<string> >& oldx = t == 0 ? train : test;
+            for (int i = 0; i < n[t]; ++i) {
+                for (int j = 0; j + gfrom <= oldx[i].size(); ++j) {
+                    stringbuf sb;
+                    for (int k = j; k < j + gfrom; ++k)
+                        sb.sputn(oldx[i][k].c_str(), oldx[i][k].size());
+                    newx[i].push_back(sb.str()); //todo
+                    for (int len = gfrom + 1; len < gto; ++len) {
+                        if (j + len > oldx[i].size()) break;
+                        sb.sputn(oldx[i][j + len - 1].c_str(), oldx[i][j + len - 1].size());
+                        newx[i].push_back(sb.str()); //todo
+                    }
                 }
-                else
-                    id = code[*p];
-                if (widx.size() < id + 1) {
-                    //cout << *p << " " << id << " " << widx.size() << endl;
-                    widx.emplace_back(1, i);
-                    word.push_back(*p);
-                }
-                else
-                    widx[id].push_back(i);
             }
-            dl[i] = x[i].size();
         }
-        int m = widx.size();
-        IntegerVector ptr(m + 1); ptr[0] = 0;
-        for (int i = 0; i < m; ++i)
-            ptr[i + 1] = ptr[i] + widx[i].size();
-        int nnz = ptr[m];
-        IntegerVector idx(nnz);
-        DoubleVector val(nnz, 1.0);
-        IntegerVector df(nnz);
-        for (int i = 0; i < m; ++i) {
-            memcpy(idx.begin() + ptr[i], widx[i].data(), sizeof(int) * widx[i].size());
-            df[i] = widx[i].size();
-        }
-        S4 ans("dtm");
-        ans.slot("p") = ptr;
-        ans.slot("i") = idx;
-        ans.slot("x") = val;
-        ans.slot("Dim") = IntegerVector::create(n, m);
-        ans.slot("Dimnames") = List::create(R_NilValue, word);
-        ans.slot("dl") = dl;
-        ans.slot("df") = df;
-        return ans;
-    } else {
-        for (int i = 0; i < n; ++i) {
-            for (auto p = x[i].begin(); p != x[i].end(); ++p) {
-                int id = -1;
-                if (code.count(*p) == 0) {
-                    id = code.size();
-                    code[*p] = id;
+        Text& x = *xp[t];
+        vector<vector<int> > widx(t == 0 ? 0 : m, vector<int>());
+        IntegerVector dl(n[t]);
+        if (!tf) {
+            for (int i = 0; i < n[t]; ++i) {
+                sort(x[i].begin(), x[i].end());
+                auto bow = std::unique(x[i].begin(), x[i].end());
+                for (auto p = x[i].begin(); p != bow; ++p) {
+                    if (t == 0) {
+                        int id = -1;
+                        if (code.count(*p) == 0) {
+                            id = code.size();
+                            code[*p] = id;
+                        }
+                        else
+                            id = code[*p];
+                        if (widx.size() < id + 1) {
+                            //cout << *p << " " << id << " " << widx.size() << endl;
+                            widx.emplace_back(1, i);
+                            word.push_back(*p);
+                        }
+                        else
+                            widx[id].push_back(i);
+                        ++dl[i];
+                    }
+                    else {
+                        if (code.count(*p) > 0) {
+                            widx[code[*p]].push_back(i);
+                            ++dl[i];
+                        }
+                    }
                 }
-                else
-                    id = code[*p];
-                if (widx.size() < id + 1) {
-                    widx.emplace_back(1, i);
-                    word.push_back(*p);
-                }
-                else
-                    widx[id].push_back(i);
             }
-            dl[i] = x[i].size();
-        }
-        int m = widx.size();
-        IntegerVector ptr(m + 1); ptr[0] = 0;
-        IntegerVector df(m);
-        for (int i = 0; i < m; ++i) {
-            int uniques = 1;
-            for (int j = 1; j < widx[i].size(); ++j)
-                if (widx[i][j] != widx[i][j - 1])
-                    ++uniques;
-            ptr[i + 1] = ptr[i] + uniques;
-            df[i] = uniques;
-        }
-        int nnz = ptr[m];
-        IntegerVector idx(nnz);
-        DoubleVector val(nnz);
-        for (int i = 0; i < m; ++i) {
-            int p = ptr[i];
-            idx[p] = widx[i][0];
-            val[p] = 1;
-            for (int j = 1; j < widx[i].size(); ++j) {
-                if (widx[i][j] != widx[i][j - 1]) {
-                    ++p;
-                    idx[p] = widx[i][j];
-                    val[p] = 1;
-                    if (idf)
-                        val[p - 1] *= log(1 + (double)n / df[i]);
-                }
-                else
-                    ++val[p];
+            if (t == 0) m = widx.size();
+            IntegerVector ptr(m + 1); ptr[0] = 0;
+            for (int i = 0; i < m; ++i)
+                ptr[i + 1] = ptr[i] + widx[i].size();
+            int nnz = ptr[m];
+            IntegerVector idx(nnz);
+            DoubleVector val(nnz, 1.0);
+            IntegerVector df(nnz);
+            for (int i = 0; i < m; ++i) {
+                memcpy(idx.begin() + ptr[i], widx[i].data(), sizeof(int) * widx[i].size());
+                df[i] = widx[i].size();
             }
-            if (idf)
-                val[p] *= log(1 + (double)n / df[i]);
+            S4 res("dtm");
+            res.slot("p") = ptr;
+            res.slot("i") = idx;
+            res.slot("x") = val;
+            res.slot("Dim") = IntegerVector::create(n[t], m);
+            res.slot("Dimnames") = List::create(R_NilValue, word);
+            res.slot("dl") = dl;
+            res.slot("df") = df;
+            ans[t] = res;
+        } else {
+            for (int i = 0; i < n[t]; ++i) {
+                for (auto p = x[i].begin(); p != x[i].end(); ++p) {
+                    if (t == 0) {
+                        int id = -1;
+                        if (code.count(*p) == 0) {
+                            id = code.size();
+                            code[*p] = id;
+                        }
+                        else
+                            id = code[*p];
+                        if (widx.size() < id + 1) {
+                            widx.emplace_back(1, i);
+                            word.push_back(*p);
+                        }
+                        else
+                            widx[id].push_back(i);
+                    }
+                    else {
+                        if (code.count(*p) > 0) {
+                            widx[code[*p]].push_back(i);
+                            ++dl[i];
+                        }
+                    }
+                }
+                dl[i] = x[i].size();
+            }
+            if (t == 0) m = widx.size();
+            IntegerVector ptr(m + 1); ptr[0] = 0;
+            IntegerVector df(m);
+            for (int i = 0; i < m; ++i) {
+                int uniques = 1;
+                for (int j = 1; j < widx[i].size(); ++j)
+                    if (widx[i][j] != widx[i][j - 1])
+                        ++uniques;
+                    ptr[i + 1] = ptr[i] + uniques;
+                    df[i] = uniques;
+            }
+            int nnz = ptr[m];
+            IntegerVector idx(nnz);
+            DoubleVector val(nnz);
+            for (int i = 0; i < m; ++i) {
+                int p = ptr[i];
+                idx[p] = widx[i][0];
+                val[p] = 1;
+                for (int j = 1; j < widx[i].size(); ++j) {
+                    if (widx[i][j] != widx[i][j - 1]) {
+                        ++p;
+                        idx[p] = widx[i][j];
+                        val[p] = 1;
+                        if (idf)
+                            val[p - 1] *= log(1 + (double)n[t] / df[i]);
+                    }
+                    else
+                        ++val[p];
+                }
+                if (idf)
+                    val[p] *= log(1 + (double)n[t] / df[i]);
+            }
+            S4 res("dtm");
+            res.slot("p") = ptr;
+            res.slot("i") = idx;
+            res.slot("x") = val;
+            res.slot("Dim") = IntegerVector::create(n[t], m);
+            res.slot("Dimnames") = List::create(R_NilValue, word);
+            res.slot("dl") = dl;
+            res.slot("df") = df;
+            ans[t] = res;
         }
-        S4 ans("dtm");
-        ans.slot("p") = ptr;
-        ans.slot("i") = idx;
-        ans.slot("x") = val;
-        ans.slot("Dim") = IntegerVector::create(n, m);
-        ans.slot("Dimnames") = List::create(R_NilValue, word);
-        ans.slot("dl") = dl;
-        ans.slot("df") = df;
-        return ans;
     }
+    return test.size() == 0 ? ans[0] : ans;
 }
 
-RcppExport SEXP C_dtm(SEXP xxSEXP, SEXP ngramSEXP, SEXP tfSEXP, SEXP idfSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
+RcppExport SEXP C_dtm(SEXP xxSEXP, SEXP ngramSEXP, SEXP gfromSEXP, SEXP gtoSEXP, SEXP tfSEXP, SEXP idfSEXP
+                          , SEXP testSEXP
+) {
     Rcpp::RNGScope rcpp_rngScope_gen;
+    BEGIN_RCPP
+        Rcpp::RObject rcpp_result_gen;
     Rcpp::traits::input_parameter< std::vector<std::vector<std::string> >& >::type xx(xxSEXP);
-    Rcpp::traits::input_parameter< std::vector<int>& >::type ngram(ngramSEXP);
+    Rcpp::traits::input_parameter< int >::type gfrom(gfromSEXP);
+    Rcpp::traits::input_parameter< int >::type gto(gtoSEXP);
     Rcpp::traits::input_parameter< bool >::type tf(tfSEXP);
     Rcpp::traits::input_parameter< bool >::type idf(idfSEXP);
-    rcpp_result_gen = Rcpp::wrap(_C_dtm(xx, ngram, tf, idf));
+    Text test = Rf_isNull(testSEXP) ? Text() : as<Text>(testSEXP);
+    rcpp_result_gen = Rcpp::wrap(_C_dtm(xx, gfrom, gto, tf, idf, test));
     return rcpp_result_gen;
-END_RCPP
+    END_RCPP
 }
 
 void _C_update_dtm_subset(S4 x) {
@@ -172,11 +199,11 @@ void _C_update_dtm_subset(S4 x) {
 }
 
 RcppExport SEXP C_update_dtm_subset(SEXP xSEXP) {
-BEGIN_RCPP
+    BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< S4 >::type x(xSEXP);
     _C_update_dtm_subset(x);
     return R_NilValue;
-END_RCPP
+    END_RCPP
 }

@@ -1,5 +1,8 @@
 #include <Rcpp.h>
+#include <vector>
+#include <iostream>
 using namespace Rcpp;
+using namespace std;
 
 // This is a simple function using Rcpp that creates an R list
 // containing a character vector and a numeric vector.
@@ -10,14 +13,17 @@ using namespace Rcpp;
 //   http://adv-r.had.co.nz/Rcpp.html
 //
 // and browse examples of code using Rcpp at:
-// 
+//
 //   http://gallery.rcpp.org/
 //
 
+struct A {
+    A() { cout << "A()" << endl; }
+};
+
 // [[Rcpp::export]]
-List rcpp_hello() {
-  CharacterVector x = CharacterVector::create("foo", "bar");
-  NumericVector y   = NumericVector::create(0.0, 1.0);
-  List z            = List::create(x, y);
-  return z;
+void rcpp_hello() {
+    vector<vector<A> > v(10);
+    cout << "--------" << endl;
+    vector<vector<A> > v2;
 }
