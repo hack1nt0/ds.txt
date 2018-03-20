@@ -19,8 +19,8 @@ cv.dtm <- function(x, nfolds = 10L, foldid, parallel = FALSE, ...) {
     nfolds = as.integer(nfolds)
     n = length(x)
     if (missing(foldid)) {
-        if (nfolds < 3L || length(x) <= nfolds) {
-            warning(paste0("nfolds should be of bound [3, ", nrow(x), ")."))
+        if (nfolds < 3L || n <= nfolds) {
+            warning(paste0("nfolds should be of bound [3, ", n, ")."))
             nfolds = min(n, max(3L, nfolds))
         }
         foldid = sample(rep(seq(nfolds), length = n))
