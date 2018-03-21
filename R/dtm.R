@@ -17,7 +17,7 @@ cv.dtm <- function(x, nfolds = 10L, foldid, parallel = FALSE, ...) {
     n = length(x)
     if (missing(foldid)) {
         if (nfolds < 3L || n <= nfolds) {
-            warning(paste0("nfolds should be of bound [3, ", n, ")."))
+            warning(paste0("nfolds should be of bound [3, ", n, "]."))
             nfolds = min(n, max(3L, nfolds))
         }
         foldid = sample(rep(seq(nfolds), length = n))
@@ -29,7 +29,7 @@ cv.dtm <- function(x, nfolds = 10L, foldid, parallel = FALSE, ...) {
     }
     ans = as.list(seq(nfolds))
     if (parallel) {
-        ans = foreach(i == seq(nfolds), .packages = c("ds.txt")) %dopar% {
+        ans = foreach(i = seq(nfolds), .packages = c("ds.txt")) %dopar% {
             test = foldid == i
             train = !test
             dtm(x[train], ..., test = x[test])
