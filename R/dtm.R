@@ -1,17 +1,14 @@
-dtm <- function(x, ngram = 1L:1L, tf = T, idf = T, test) {
+dtm <- function(x, ngram = 1L:1L, weight = 21L, test = NULL) {
     stopifnot(is.list(x) && all(sapply(x, is.character)))
+    stopifnot(is.null(test) || is.list(test) && all(sapply(test, is.character)))
     ngram = as.integer(ngram)
     stopifnot(length(ngram) > 0 && identical(is.unsorted(ngram), FALSE)
               && ngram[[1L]] <= ngram[[length(ngram)]])
     gfrom = ngram[[1L]]
     gto = ifelse(length(ngram) == 1L, ngram[[1L]] + 1, ngram[[length(ngram)]] + 1)
-    tf = as.logical(tf)
-    idf = as.logical(idf)
-    if (missing(test))
-        test = NULL
-    else
-        stopifnot(is.list(test) && all(sapply(test, is.character)))
-    ans = .Call('C_dtm', PACKAGE = 'ds.txt', x, gfrom, gto, tf, idf, test)
+    weight = as.integer(weight)
+    ans = .Call('C_dtm', PACKAGE = 'ds.txt', x, gfrom, gto, weight, test)
+    if (is.null(test)) ans[[1L]] else ans
 }
 
 cv.dtm <- function(x, nfolds = 10L, foldid, parallel = FALSE, ...) {
@@ -33,15 +30,15 @@ cv.dtm <- function(x, nfolds = 10L, foldid, parallel = FALSE, ...) {
     ans = as.list(seq(nfolds))
     if (parallel) {
         ans = foreach(i == seq(nfolds), .packages = c("ds.txt")) %dopar% {
-            train = foldid == i
-            test = !train
+            test = foldid == i
+            train = !test
             dtm(x[train], ..., test = x[test])
         }
     }
     else {
         for(i in seq(nfolds)) {
-            train = foldid == i
-            test = !train
+            test = foldid == i
+            train = !test
             ans[[i]] = dtm(x[train], ..., test = x[test])
         }
     }

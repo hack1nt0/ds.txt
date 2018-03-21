@@ -7,10 +7,25 @@ using namespace Rcpp;
 
 // rcpp_hello
 void rcpp_hello();
-RcppExport SEXP ds_txt_rcpp_hello() {
+RcppExport SEXP _ds_txt_rcpp_hello() {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     rcpp_hello();
     return R_NilValue;
 END_RCPP
+}
+
+RcppExport SEXP C_dtm(SEXP, SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP C_update_dtm_subset(SEXP);
+
+static const R_CallMethodDef CallEntries[] = {
+    {"_ds_txt_rcpp_hello", (DL_FUNC) &_ds_txt_rcpp_hello, 0},
+    {"C_dtm",               (DL_FUNC) &C_dtm,               5},
+    {"C_update_dtm_subset", (DL_FUNC) &C_update_dtm_subset, 1},
+    {NULL, NULL, 0}
+};
+
+RcppExport void R_init_ds_txt(DllInfo *dll) {
+    R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
+    R_useDynamicSymbols(dll, FALSE);
 }

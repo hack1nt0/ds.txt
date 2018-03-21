@@ -1,7 +1,7 @@
 fxy <- function(X, Y = NULL, ff = list(
     x.equal.y = function(i) identical(X[[i]], Y[[i]])
     , row.idx = function(i) i
-), dtm = T, ngram = 1L, tf = F, idf = F, ...) {
+), dtm = T, ngram = 1L, weight = 0L, ...) {
 
     stopifnot(is.list(X) && all(sapply(X, is.character)) &&
                   (is.logical(dtm) || is.dtm(dtm)))
@@ -9,7 +9,7 @@ fxy <- function(X, Y = NULL, ff = list(
     if (is.dtm(dtm))
         A <- dtm
     else {
-        A <- dtm(X, tf = tf, idf = idf, ...)
+        A <- dtm(X, ngram = ngram, weight = weight, ...)
         # warning("X is not list of character', entering test mode...")
         # A <- rsparsematrix(length(X), 2, 0.5)
         # colnames(A) = c("T1", "T2")
