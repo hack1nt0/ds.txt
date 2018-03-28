@@ -1,47 +1,59 @@
-fxy <- function(X, Y = NULL, ff = list(
-    x.equal.y = function(i) identical(X[[i]], Y[[i]])
-    , row.idx = function(i) i
-), dtm = T, ngram = 1L, weight = 0L, ...) {
-
-    stopifnot(is.list(X) && all(sapply(X, is.character)) &&
-                  (is.logical(dtm) || is.dtm(dtm)))
-    require(Matrix)
-    if (is.dtm(dtm))
-        A <- dtm
-    else {
-        A <- dtm(X, ngram = ngram, weight = weight, ...)
-        # warning("X is not list of character', entering test mode...")
-        # A <- rsparsematrix(length(X), 2, 0.5)
-        # colnames(A) = c("T1", "T2")
-    }
-    B0 = vector("list", length(ff))
-    names.B0 = vector("character", length(ff))
-    j <- 1L
-    names.ff = names(ff)
-    for (fi in 1:length(ff)) {
-        f = ff[[fi]]
-        col = vector("character", length(X))
-        for (i in 1:length(X)) col[[i]] = f(i)
-        col = as.factor(col)
-        if (nlevels(col) >= 2L) {
-            B0[[j]] = col
-            names.B0[[j]] = ifelse(is.null(names.ff[[fi]]),
-                                   as.character(enquote(body(f)))[[2L]],
-                                   names.ff[[fi]])
-            j = j + 1L
+fxy <- function(X, Y, potentials = list (
+    list(word = dtm(ngram = 1:1, weight = 0L), y = NA, value = 1)
+), lower.f = 1L, lower.d = 1L) {
+    Y = as.factor(Y)
+    levels.Y = levels(Y)
+    Y = as.integer(Y)
+    np = length(potentials)
+    xs = list()
+    ws = list()
+    for (p in potentials) {
+        predicate = p[[1L]]
+        y = p[[2L]]
+        if (is.na(y))
+            y = 1:length(levels.Y)
+        else {
+            y = as.integer(factor(p[[2L]], levels = levels.Y))
+            if (is.na(y))
+                stop(paste("Value of feature Function outcome [", P[[2L]], "] not in given levels [",
+                           paste(levels.Y, sep = ", "), "]."))
         }
-        else
-            warning(paste0("Feature function(", names.ff[[fi]], " = ", as.character(enquote(body(f)))[[2L]],
-                           ") should be meaningful (e.g. nlevels(extracted.features) >= 2L), discarded.\n"))
+        value = ifelse(is.null(p$value), 1, p$value)
+        SM = as(predicate(X), "dgCMatrix") #todo
+        prefix = names(p)[[1L]]
+        colnames(SM) = str_c(prefix, colnames(SM), sep = "_")
+        if (!is.null(xs$prefix))
+            stop(paste("Duplicated Feature Functions(name): ", prefix))
+        xs$prefix = SM
+        W = matrix(0, nrow = ncol(SM), ncol = length(levels.Y))
+        W[, y] = 1
+        ws$prefix = W
     }
-    if (j > 1L) {
-        names(B0) = names.B0
-        B <- sparse.model.matrix(~., as.data.frame(B0[1:(j - 1L)]))
-        cbind(B, A)
-    }
-    else {
-        C = cbind(1, A)
-        colnames(C)[[1L]] = "(Intercept)"
-        C
-    }
+    ans = list()
+    FX = do.call(cbind, xs)
+    FW = do.call(cbind, ws)
+    validWi = (lower.f <= rowSums(FW))
+    ans$features = c(sum(validWi), nrow(FW), lower.f)
+    FW = FW[validWi,, drop = F]
+    FX = FX[, validWi, drop = F]
+    validXi = (lower.d <= Matrix::rowSums(FX))
+    FX = FX[validXi,, drop = F]
+    ans$Y = Y[validXi]
+    ans$inputs = c(sum(validXi), length(X), lower.d)
+    ans$X = FX
+    ans$W = FW
+    ans$levels.Y = levels.Y
+    ans$potentials = potentials
+    ans$call = match.call()
+    class(ans) = "fxy"
+    ans
+}
+
+print.fxy <- function(obj) {
+    cat("Call: ")
+    print(obj$call)
+    stat = matrix(c(obj$features, obj$inputs), nrow = 2L, byrow = T)
+    rownames(stat) = c("Feature", "Input")
+    colnames(stat) = c("Valid", "Total", "Cutoff(lower bound)")
+    print(stat)
 }

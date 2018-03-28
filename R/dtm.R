@@ -1,5 +1,10 @@
 dtm <- function(x, ngram = 1L:1L, weight = 21L, test = NULL) {
-    stopifnot(is.list(x) && all(sapply(x, is.character)))
+    if (missing(x))
+        return(function(x) dtm(x, ngram = ngram, weight = weight, test = test))
+    if (!is.list(x))
+        stop("Maybe you havent tokenized the corpus.")
+    if (!all(sapply(x, is.character)))
+        stop("Input contains no-character-type value.")
     stopifnot(is.null(test) || is.list(test) && all(sapply(test, is.character)))
     ngram = as.integer(ngram)
     stopifnot(length(ngram) > 0 && identical(is.unsorted(ngram), FALSE)

@@ -4,6 +4,7 @@
 #include <map>
 #include <algorithm>
 #include <cstring>
+#include <unordered_map>
 using namespace Rcpp;
 using namespace std;
 
