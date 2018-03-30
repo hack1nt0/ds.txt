@@ -11,6 +11,9 @@ Encoding: UTF-8
 LazyData: true
 Imports: 
     Rcpp (>= 0.12.7),
+    Matrix,
+    foreach,
+    data.table
 LinkingTo: Rcpp
 Depends: 
     Matrix,
