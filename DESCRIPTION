@@ -13,8 +13,9 @@ Imports:
     Rcpp (>= 0.12.7),
     Matrix,
     foreach,
+    stringr,
     data.table
 LinkingTo: Rcpp
 Depends: 
     Matrix,
-    foreach
+    stringr

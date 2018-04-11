@@ -18,3 +18,5 @@ StripTrailingWhitespace: Yes
 BuildType: Package
 PackageUseDevtools: Yes
 PackageInstallArgs: --no-multiarch --with-keep.source
+PackageBuildArgs: --configure-args="CFLAGS=-g CXXFLAGS=-g"
+PackageBuildBinaryArgs: --configure-args="CFLAGS=-g CXXFLAGS=-g"

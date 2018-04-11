@@ -1,3 +1,7 @@
 exportPattern("^[[:alpha:]]+")
 importFrom(Rcpp, evalCpp)
 useDynLib(ds.txt)
+import(Matrix)
+import(foreach)
+import(stringr)
+import(data.table)

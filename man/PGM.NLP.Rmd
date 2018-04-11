@@ -34,3 +34,10 @@ Note that the `echo = FALSE` parameter was added to the code chunk to prevent pr
 ### No assumption of feature independence ??
 
 ### What if most feature functions are of paticular class ?? (feature functions imbalance)
+$Accuracy
+[1] 0.624031
+
+$per.class
+      Precision    Recall F-measure Accuracy FPR TPR AUC
+FALSE 0.6921329 0.6988816 0.6954909       NA  NA  NA  NA
+TRUE  0.5127610 0.5047967 0.5087477       NA  NA  NA  NA
