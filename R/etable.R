@@ -39,6 +39,7 @@ etable <- function(true, guess, ...) {
 
 print.etable <- function(obj) {
     print(obj$table)
+    cat("Accuracy: ", obj$accuracy, "\n")
     print(obj$measure)
     invisible(print(obj$summary.table))
 }

@@ -1,5 +1,5 @@
-me <- function(X, lambda = 0, alpha = 0, method = c("Adam", "L-BFGS-B"),
-               maxit = 100L, tolerance = 1e-9, eta = 0.001, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, verbose = FALSE, keep = FALSE,
+me <- function(X, lambda = 0, alpha = 0, method = c("Adam", "RAdam", "L-BFGS-B"),
+               maxit = 100L, tolerance = 1e-9, eta = 0.001, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, AMSGrad = FALSE, decay = FALSE, verbose = FALSE, keep = FALSE,
                FW = matrix(rnorm(nf), nrow = np, ncol = nc)) {
     stopifnot(is.fxy(X))
     ans = list()
@@ -20,7 +20,7 @@ me <- function(X, lambda = 0, alpha = 0, method = c("Adam", "L-BFGS-B"),
     if (method == "Adam") {
         tFX = t(FX)
         res = .Call("C_me", PACKAGE = "ds.txt", nx, np, nc, tFX@p, tFX@i, FX@p, FX@i, Y, lambda, alpha, FW, FS, maxit,
-                    tolerance, eta, beta1, beta2, epsilon, verbose, keep)
+                    tolerance, eta, beta1, beta2, epsilon, AMSGrad, decay, verbose, keep)
         ans$W = FW
         if (keep) {
             ans$P = res$P
@@ -32,7 +32,7 @@ me <- function(X, lambda = 0, alpha = 0, method = c("Adam", "L-BFGS-B"),
             ans$losses = res
         }
     }
-    else if (method == "L-BFGS-B") {
+    else {
         ixs = 1:nx; ips = 1:np
         adjDfm = adjacent.list(FX, byrow = T)
         adjFdm = adjacent.list(FX, byrow = F)
@@ -81,8 +81,34 @@ me <- function(X, lambda = 0, alpha = 0, method = c("Adam", "L-BFGS-B"),
             as.double(FG) # todo
         }
         # check.grad(loss, grad, FW, epsilon = 1e-9)
-        opt.obj = optim(as.double(FW), fn = loss, gr = grad, method = "L-BFGS", control = list(maxit = maxit))
-        ans$W = matrix(opt.obj$par, nrow = np, ncol = nc)
+        if (method == "RAdam") {
+            gr = matrix(0, np, nc)
+            gr1 = matrix(0, np, nc)
+            gr2 = matrix(0, np, nc)
+            max.gr2 = matrix(0, np, nc)
+            powBeta1 = beta1
+            powBeta2 = beta2
+            for (it in 1:maxit) {
+                if (verbose)
+                    loss(FW)
+                gr[,] = grad(FW)
+                gr1[,] = beta1 * gr1 + (1 - beta1) * gr
+                gr2[,] = if (decay) (powBeta2 * gr2 + (1 - powBeta2) * gr * gr)  else (beta2 * gr2 + (1 - beta2) * gr * gr)
+                if (AMSGrad) {
+                    max.gr2[,] = pmax(max.gr2, gr2)
+                    FW[,] = FW - eta * gr1 / (sqrt(max.gr2) + epsilon)
+                }
+                else
+                    FW[,] = FW - eta * (gr1 / (1 - powBeta1)) / (sqrt(gr2 / (1 - powBeta2)) + epsilon)
+                powBeta1 = powBeta1 * beta1
+                powBeta2 = powBeta2 * beta2
+            }
+            ans$W = FW
+        }
+        else if (method == "L-BFGS-B") {
+            opt.obj = optim(as.double(FW), fn = loss, gr = grad, method = "L-BFGS", control = list(maxit = maxit))
+            ans$W = matrix(opt.obj$par, nrow = np, ncol = nc)
+        }
         ans$losses = na.omit(env$losses)
     }
     stopifnot(all(FW[FS == 0] == 0))
@@ -96,7 +122,7 @@ me <- function(X, lambda = 0, alpha = 0, method = c("Adam", "L-BFGS-B"),
 cv.me <- function(X, lambdas = NULL, alphas = c(0, 0.5, 1),
                   type.measure = c("class", "auc", "log.likelihood"),
                   nfold = 10L, foldid = NULL, parallel = FALSE,
-                  maxit = 100L, tolerance = 1e-9, eta = 0.001, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, verbose = FALSE,
+                  maxit = 100L, tolerance = 1e-9, eta = 0.001, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, AMSGrad = FALSE, verbose = FALSE,
                   FW = matrix(rnorm(nf), nrow = np, ncol = nc)) {
     type.measure = match.arg(type.measure)
     # type.predict = switch(type.measure, class = "class", auc = "response", log.likelihood = "response")
@@ -133,7 +159,7 @@ cv.me <- function(X, lambdas = NULL, alphas = c(0, 0.5, 1),
         train.Y = Y[-batch,]
         t.test.X = tFX[batch,]
         test.Y = Y[batch,]
-        res = .Call("C_cv_me", PACKAGE = "ds.txt", t.train.X@p, t.train.X@i, train.X@p, train.X@i, train.Y, t.test.X@p, t.test.X@i, test.Y, lambdas, alphas, type.measure, FW, FS, maxit, tolerance, eta, beta1, beta2, epsilon, verbose)
+        res = .Call("C_cv_me", PACKAGE = "ds.txt", t.train.X@p, t.train.X@i, train.X@p, train.X@i, train.Y, t.test.X@p, t.test.X@i, test.Y, lambdas, alphas, type.measure, FW, FS, maxit, tolerance, eta, beta1, beta2, epsilon, AMSGrad, verbose)
         losses.batches[[foldi]] = res
     }
     losses = do.call(`+`, losses.batches) / nfold
@@ -313,7 +339,7 @@ test.me.3 <- function() {
     cv.me.obj
 }
 
-test.me.2 <- function(...) {
+test.me <- function(...) {
     set.seed(1)
     spam.sms = na.omit(spam.sms)
     nx = nrow(spam.sms)
@@ -323,11 +349,7 @@ test.me.2 <- function(...) {
     test.X = spam.sms$body[-train.idx]
     test.Y = spam.sms$is.spam[-train.idx]
     fxy.obj <<- fxy(train.X, train.Y, lower.f = 3L)
-    print(fxy.obj)
     me.obj <<- me(fxy.obj, ..., verbose = T)
-    print("------------")
     pred.me <<- predict(me.obj, test.X, type = "class")
-    print(pred.me)
-    print("------------")
-    etable(test.Y, pred.me$result)
+    print(etable(test.Y, pred.me$result))
 }

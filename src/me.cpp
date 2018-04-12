@@ -37,7 +37,8 @@ SEXP _C_me(int nx, int np, int nc,
         IntegerVector  ptrP, IntegerVector  indX,
         IntegerVector  Y, double lambda, double alpha,
         NumericMatrix  FW, NumericMatrix  FS,
-        int niter, double tolerance, double eta, double beta1, double beta2, double epsilon, bool verbose,
+        int niter, double tolerance, double eta, double beta1, double beta2, double epsilon, bool AMSGrad,
+        bool verbose,
         NumericMatrix  FC, NumericMatrix  P,
         NumericMatrix  meanGrad,
         NumericMatrix  varGrad,
@@ -53,7 +54,12 @@ SEXP _C_me(int nx, int np, int nc,
     vector<double> losses;
     double powBeta1 = beta1;
     double powBeta2 = beta2;
+    LogicalMatrix converaged(np, nc); //todo
+    converaged.fill(false);
+    int nconveraged = 0, nf = np * nc;
     for (int it = 0, ib = 0; it < niter; ++it) {
+        if (nconveraged == nf)
+            break;
         // loss
         P.fill(0.);
         double lhs, rhs;
@@ -76,9 +82,12 @@ SEXP _C_me(int nx, int np, int nc,
             Rcout << "Epoch " << it << "\t, loss " << loss << endl;
         if (losses.size() >= 2 && abs(losses[it] - losses[it - 1]) <= tolerance)
             break;
+
         //grad
         for (int ip = 0; ip < np; ++ip) {
             for (int y = 0; y < nc; ++y) {
+                if (converaged(ip, y))
+                    continue;
                 double score = FS(ip, y);
                 if (score <= 0.)
                     continue;
@@ -94,8 +103,17 @@ SEXP _C_me(int nx, int np, int nc,
                 double mean = beta1 * meanGrad(ip, y) + (1. - beta1) * g;
                 double var  = beta2 * varGrad(ip, y) + (1. - beta2) * g * g;
                 double maxVar = max(maxVarGrad(ip, y), var);
-                FW(ip, y) -= eta * (mean / (1 - powBeta1)) / (sqrt(var / (1 - powBeta2)) + epsilon);
-                // FW(ip, y) -= eta * (mean) / (sqrt(maxVar) + epsilon);
+                double neww = 0;
+                if (AMSGrad)
+                    neww = oldw - eta * (mean) / (sqrt(maxVar) + epsilon);
+                else
+                    neww = oldw - eta * (mean / (1 - powBeta1)) / (sqrt(var / (1 - powBeta2)) + epsilon);
+                if (abs(neww - oldw) < tolerance) {
+                    converaged(ip, y) = true;
+                    ++nconveraged;
+                    continue;
+                }
+                FW(ip, y) = neww;
                 meanGrad(ip, y) = mean;
                 varGrad(ip, y) = var;
                 maxVarGrad(ip, y) = maxVar;
@@ -111,7 +129,8 @@ SEXP _C_me(int nx, int np, int nc,
                             Named("mean.gr") = meanGrad,
                             Named("var.gr") = varGrad,
                             Named("max.var.gr") = maxVarGrad,
-                            Named("P") = P
+                            Named("P") = P,
+                            Named("converaged") = converaged
                             );
     } else
         return wrap(losses);
@@ -127,7 +146,7 @@ SEXP _C_cv_me(
         NumericVector lambdas, NumericVector alphas,
         String measureType,
         NumericMatrix initFW, NumericMatrix FS, int niter, double tolerance,
-        double eta, double beta1, double beta2, double epsilon,
+        double eta, double beta1, double beta2, double epsilon, bool AMSGrad,
         bool verbose) {
     int nTrainX = trainY.size();
     int nTestX = ptrTestX.size() - 1;
@@ -148,8 +167,8 @@ SEXP _C_cv_me(
         FW = initFW;
         for (int il = 0; il < nlambda; ++il) {
             double lambda = lambdas[il];
-            _C_me(nTrainX, np, nc, ptrTrainX, indTrainP, ptrTrainP, indTrainX, trainY, lambda, alpha, FW, FS, niter,
-                 eta, beta1, beta2, epsilon, tolerance, verbose,
+            _C_me(nTrainX, np, nc, ptrTrainX, indTrainP, ptrTrainP, indTrainX, trainY, lambda, alpha, FW, FS, niter, tolerance,
+                 eta, beta1, beta2, epsilon, AMSGrad, verbose,
                  FC, trainP, meanGrad, varGrad, maxVarGrad, false);
             testP.fill(.0);
             for (int ix = 0; ix < nTestX; ++ix) {
@@ -187,7 +206,7 @@ SEXP _C_cv_me(
 RcppExport SEXP C_me(SEXP nxSEXP, SEXP npSEXP, SEXP ncSEXP,
                      SEXP ptrXSEXP, SEXP indPSEXP, SEXP ptrPSEXP, SEXP indXSEXP, SEXP YSEXP,
                      SEXP lambdaSEXP, SEXP alphaSEXP, SEXP FWSEXP, SEXP FSSEXP,
-                     SEXP niterSEXP, SEXP toleranceSEXP, SEXP etaSEXP, SEXP beta1SEXP, SEXP beta2SEXP, SEXP epsilonSEXP, SEXP verboseSEXP, SEXP keepSEXP) {
+                     SEXP niterSEXP, SEXP toleranceSEXP, SEXP etaSEXP, SEXP beta1SEXP, SEXP beta2SEXP, SEXP epsilonSEXP, SEXP AMSGradSEXP, SEXP verboseSEXP, SEXP keepSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -208,6 +227,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type beta1(beta1SEXP);
     Rcpp::traits::input_parameter< double >::type beta2(beta2SEXP);
     Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< bool >::type AMSGrad(AMSGradSEXP);
     Rcpp::traits::input_parameter< double >::type tolerance(toleranceSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< bool >::type keep(keepSEXP);
@@ -216,13 +236,13 @@ BEGIN_RCPP
     NumericMatrix meanGrad(np, nc);
     NumericMatrix varGrad(np, nc);
     NumericMatrix maxVarGrad(np, nc);
-    rcpp_result_gen = Rcpp::wrap(_C_me(nx, np, nc, ptrX, indP, ptrP, indX, Y, lambda, alpha, FW, FS, niter, tolerance, eta, beta1, beta2, epsilon, verbose, FC, P, meanGrad, varGrad, maxVarGrad, keep));
+    rcpp_result_gen = Rcpp::wrap(_C_me(nx, np, nc, ptrX, indP, ptrP, indX, Y, lambda, alpha, FW, FS, niter, tolerance, eta, beta1, beta2, epsilon, AMSGrad, verbose, FC, P, meanGrad, varGrad, maxVarGrad, keep));
     return rcpp_result_gen;
 END_RCPP
 }
 
 // C_cv_me
-RcppExport SEXP C_cv_me(SEXP ptrTrainXSEXP, SEXP indTrainPSEXP, SEXP ptrTrainPSEXP, SEXP indTrainXSEXP, SEXP trainYSEXP, SEXP ptrTestXSEXP, SEXP indTestPSEXP, SEXP testYSEXP, SEXP lambdasSEXP, SEXP alphasSEXP, SEXP measureTypeSEXP, SEXP initFWSEXP, SEXP FSSEXP, SEXP niterSEXP, SEXP toleranceSEXP, SEXP etaSEXP, SEXP beta1SEXP, SEXP beta2SEXP, SEXP epsilonSEXP, SEXP verboseSEXP) {
+RcppExport SEXP C_cv_me(SEXP ptrTrainXSEXP, SEXP indTrainPSEXP, SEXP ptrTrainPSEXP, SEXP indTrainXSEXP, SEXP trainYSEXP, SEXP ptrTestXSEXP, SEXP indTestPSEXP, SEXP testYSEXP, SEXP lambdasSEXP, SEXP alphasSEXP, SEXP measureTypeSEXP, SEXP initFWSEXP, SEXP FSSEXP, SEXP niterSEXP, SEXP toleranceSEXP, SEXP etaSEXP, SEXP beta1SEXP, SEXP beta2SEXP, SEXP epsilonSEXP, SEXP AMSGradSEXP, SEXP verboseSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -245,8 +265,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type beta2(beta2SEXP);
     Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
     Rcpp::traits::input_parameter< double >::type tolerance(toleranceSEXP);
+    Rcpp::traits::input_parameter< bool >::type AMSGrad(AMSGradSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    rcpp_result_gen = Rcpp::wrap(_C_cv_me(ptrTrainX, indTrainP, ptrTrainP, indTrainX, trainY, ptrTestX, indTestP, testY, lambdas, alphas, measureType, initFW, FS, niter, tolerance, eta, beta1, beta2, epsilon, verbose));
+    rcpp_result_gen = Rcpp::wrap(_C_cv_me(ptrTrainX, indTrainP, ptrTrainP, indTrainX, trainY, ptrTestX, indTestP, testY, lambdas, alphas, measureType, initFW, FS, niter, tolerance, eta, beta1, beta2, epsilon, AMSGrad, verbose));
     return rcpp_result_gen;
 END_RCPP
 }

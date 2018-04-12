@@ -1,6 +1,6 @@
 fxy <- function(X, Y, potentials = list (
-    list(word = ngrams(n = 1:1, tokenize = TRUE), y = NA, score = 1),
-    list(nsep = function(X) str_count(X, "[,.，。!！]"), y = NA, score = 1)
+    # list(nsep = function(X) str_count(X, "[,.，。!！]"), y = NA, score = 1),
+    list(word = ngrams(n = 1:1, tokenize = TRUE), y = NA, score = 1)
 ),
 lower.f = 1L, lower.d = 1L) {
     stopifnot(all(!is.na(X)) & all(!is.null(X)))
