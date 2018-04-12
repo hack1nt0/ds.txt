@@ -1,9 +1,10 @@
 me <- function(X, lambda = 0, alpha = 0, method = c("Adam", "L-BFGS-B"),
-               maxit = 100L, tolerance = 1e-9, eta = 0.001, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, verbose = FALSE,
+               maxit = 100L, tolerance = 1e-9, eta = 0.001, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, verbose = FALSE, keep = FALSE,
                FW = matrix(rnorm(nf), nrow = np, ncol = nc)) {
     stopifnot(is.fxy(X))
     ans = list()
     ans$fxy.obj = X
+    ans$levels.Y = X$levels.Y
     env <- new.env(parent = emptyenv())
     env$losses = rep(NA, maxit)
     env$it = 0L
@@ -19,10 +20,17 @@ me <- function(X, lambda = 0, alpha = 0, method = c("Adam", "L-BFGS-B"),
     if (method == "Adam") {
         tFX = t(FX)
         res = .Call("C_me", PACKAGE = "ds.txt", nx, np, nc, tFX@p, tFX@i, FX@p, FX@i, Y, lambda, alpha, FW, FS, maxit,
-                    eta, beta1, beta2, epsilon, tolerance, verbose)
-        ans$W = res$W
-        ans$losses = res$losses
-        ans$P = res$P
+                    tolerance, eta, beta1, beta2, epsilon, verbose, keep)
+        ans$W = FW
+        if (keep) {
+            ans$P = res$P
+            ans$mean.gr = res$mean.gr
+            ans$var.gr = res$var.gr
+            ans$max.var.gr = res$max.var.gr
+            ans$losses = res$losses
+        } else {
+            ans$losses = res
+        }
     }
     else if (method == "L-BFGS-B") {
         ixs = 1:nx; ips = 1:np
@@ -69,7 +77,7 @@ me <- function(X, lambda = 0, alpha = 0, method = c("Adam", "L-BFGS-B"),
                 ids = adjFdm[[ip]]
                 FG[ip,] = Matrix::colSums(P[ids,, drop = F])
             }
-            FG[,] = (FG - FC) * FS / nx + lambda * ((1 - alpha) * 2 * FW + sign(FW))
+            FG[,] = (FG - FC) * FS / nx + lambda * ((1 - alpha) * 2 * FW + alpha * sign(FW))
             as.double(FG) # todo
         }
         # check.grad(loss, grad, FW, epsilon = 1e-9)
@@ -181,7 +189,12 @@ predict.me <- function(me.obj, X, type = c("class", "response", "link", "coeffic
         if (type == "class") {
             guess.Y = NULL
             if (nc == 2L) {
-                complement.class = ifelse(levels.Y[1L] == target.class, levels.Y[2L], levels.Y[1L])
+                complement.class = NULL
+                if (levels.Y[1L] == target.class)
+                    complement.class = levels.Y[2L]
+                else
+                    complement.class = levels.Y[1L]
+                print(complement.class)
                 guess.Y = rep(complement.class, nx)
                 guess.Y[P[, target.class] >= threshold] = target.class
             } else {
@@ -248,7 +261,7 @@ print.predict.me <- function(obj, order.by = NULL) {
             cat("Evidence: "); invisible(print(M));
         }
     } else {
-        invisible(print(obj))
+        warning("Not implemented yet.")
     }
 }
 
@@ -300,7 +313,7 @@ test.me.3 <- function() {
     cv.me.obj
 }
 
-test.me.2 <- function() {
+test.me.2 <- function(...) {
     set.seed(1)
     spam.sms = na.omit(spam.sms)
     nx = nrow(spam.sms)
@@ -311,11 +324,10 @@ test.me.2 <- function() {
     test.Y = spam.sms$is.spam[-train.idx]
     fxy.obj <<- fxy(train.X, train.Y, lower.f = 3L)
     print(fxy.obj)
-    me.obj <<- me(fxy.obj, method = "L-BFGS", maxit = 1L, verbose = T)
+    me.obj <<- me(fxy.obj, ..., verbose = T)
     print("------------")
-    pred.me <<- predict(me.obj, test.X)
+    pred.me <<- predict(me.obj, test.X, type = "class")
+    print(pred.me)
     print("------------")
-    summary.me <<- summary(pred.me, test.Y)
-    print("------------")
-    summary.me
+    etable(test.Y, pred.me$result)
 }

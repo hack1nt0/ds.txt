@@ -23,7 +23,10 @@ struct A {
 
 // [[Rcpp::export]]
 void rcpp_hello() {
-    vector<vector<A> > v(10);
-    cout << "--------" << endl;
-    vector<vector<A> > v2;
+    int nx = 3, np = 4, nc = 2;
+    NumericMatrix P(nx, nc);
+    NumericMatrix meanGrad(np, nc);
+    NumericMatrix varGrad(np, nc);
+    NumericMatrix maxVarGrad(np, nc);
+    cout << P << endl;
 }

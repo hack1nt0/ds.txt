@@ -21,14 +21,12 @@ double logsumexp(const V & v) {
     return lse;
 }
 
-NumericMatrix makeFC(int np, int nc, IntegerVector  ptrP, IntegerVector  indX, IntegerVector  Y) {
+NumericMatrix makeFC(int np, int nc, IntegerVector  ptrP, IntegerVector  indX, IntegerVector Y) {
     NumericMatrix FC(np, nc); FC.fill(.0);
     for (int ip = 0; ip < np; ++ip) {
-        for (int y = 0; y < nc; ++y) {
-            for (int pp = ptrP[ip]; pp < ptrP[ip + 1]; ++pp) {
-                int y = Y[indX[pp]];
-                FC(ip, y) += 1;
-            }
+        for (int pp = ptrP[ip]; pp < ptrP[ip + 1]; ++pp) {
+            int y = Y[indX[pp]] - 1;
+            FC(ip, y) += 1;
         }
     }
     return FC;
@@ -43,8 +41,12 @@ SEXP _C_me(int nx, int np, int nc,
         NumericMatrix  FC, NumericMatrix  P,
         NumericMatrix  meanGrad,
         NumericMatrix  varGrad,
-        NumericMatrix  maxVarGrad
+        NumericMatrix  maxVarGrad,
+        bool keep
         ) {
+    cout << "eta: " << eta << endl;
+    cout << beta1 << endl;
+    cout << beta2 << endl;
     meanGrad.fill(0.);
     varGrad.fill(0.);
     maxVarGrad.fill(0.);
@@ -77,7 +79,8 @@ SEXP _C_me(int nx, int np, int nc,
         //grad
         for (int ip = 0; ip < np; ++ip) {
             for (int y = 0; y < nc; ++y) {
-                if (FS(ip, y) <= 0.)
+                double score = FS(ip, y);
+                if (score <= 0.)
                     continue;
                 double fc = 0;
                 for (int pp = ptrP[ip]; pp < ptrP[ip + 1]; ++pp) {
@@ -86,7 +89,8 @@ SEXP _C_me(int nx, int np, int nc,
                 }
                 double oldw = FW(ip, y);
                 double signOldW = oldw < -tolerance ? -1 : (oldw > +tolerance ? +1 : 0);
-                double g = (fc - FC(ip, y)) * FS(ip, y) / nx + lambda * ((1 - alpha) * 2. * oldw + alpha * signOldW);
+                double g = (fc - FC(ip, y)) * score / nx + lambda * ((1 - alpha) * 2. * oldw + alpha * signOldW);
+                // double g = (fc - FC(ip, y)) * score / nx;
                 double mean = beta1 * meanGrad(ip, y) + (1. - beta1) * g;
                 double var  = beta2 * varGrad(ip, y) + (1. - beta2) * g * g;
                 double maxVar = max(maxVarGrad(ip, y), var);
@@ -102,11 +106,17 @@ SEXP _C_me(int nx, int np, int nc,
             powBeta2 *= beta2;
         }
     }
-    return List::create(Named("losses") = losses,
-                        Named("mean.grad") = meanGrad,
-                        Named("var.grad") = varGrad
-                        );
+    if (keep) {
+        return List::create(Named("losses") = losses,
+                            Named("mean.gr") = meanGrad,
+                            Named("var.gr") = varGrad,
+                            Named("max.var.gr") = maxVarGrad,
+                            Named("P") = P
+                            );
+    } else
+        return wrap(losses);
 }
+
 
 SEXP _C_cv_me(
         IntegerVector ptrTrainX, IntegerVector indTrainP,
@@ -140,7 +150,7 @@ SEXP _C_cv_me(
             double lambda = lambdas[il];
             _C_me(nTrainX, np, nc, ptrTrainX, indTrainP, ptrTrainP, indTrainX, trainY, lambda, alpha, FW, FS, niter,
                  eta, beta1, beta2, epsilon, tolerance, verbose,
-                 FC, trainP, meanGrad, varGrad, maxVarGrad);
+                 FC, trainP, meanGrad, varGrad, maxVarGrad, false);
             testP.fill(.0);
             for (int ix = 0; ix < nTestX; ++ix) {
                 for (int pp = ptrTestX[ix]; pp < ptrTestX[ix + 1]; ++pp) {
@@ -177,47 +187,37 @@ SEXP _C_cv_me(
 RcppExport SEXP C_me(SEXP nxSEXP, SEXP npSEXP, SEXP ncSEXP,
                      SEXP ptrXSEXP, SEXP indPSEXP, SEXP ptrPSEXP, SEXP indXSEXP, SEXP YSEXP,
                      SEXP lambdaSEXP, SEXP alphaSEXP, SEXP FWSEXP, SEXP FSSEXP,
-                     SEXP niterSEXP, SEXP toleranceSEXP, SEXP etaSEXP, SEXP beta1SEXP, SEXP beta2SEXP, SEXP epsilonSEXP, SEXP verboseSEXP) {
+                     SEXP niterSEXP, SEXP toleranceSEXP, SEXP etaSEXP, SEXP beta1SEXP, SEXP beta2SEXP, SEXP epsilonSEXP, SEXP verboseSEXP, SEXP keepSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    // Rcpp::traits::input_parameter< int >::type nx(nxSEXP);
-    // Rcpp::traits::input_parameter< int >::type np(npSEXP);
-    // Rcpp::traits::input_parameter< int >::type nc(ncSEXP);
-    // Rcpp::traits::input_parameter< IntegerVector >::type ptrX(ptrXSEXP);
-    // Rcpp::traits::input_parameter< IntegerVector >::type indP(indPSEXP);
+    Rcpp::traits::input_parameter< int >::type nx(nxSEXP);
+    Rcpp::traits::input_parameter< int >::type np(npSEXP);
+    Rcpp::traits::input_parameter< int >::type nc(ncSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type ptrX(ptrXSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type indP(indPSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type ptrP(ptrPSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type indX(indXSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type Y(YSEXP);
-    // Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
-    // Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
-    // Rcpp::traits::input_parameter< NumericMatrix >::type FW(FWSEXP);
-    // Rcpp::traits::input_parameter< NumericMatrix >::type FS(FSSEXP);
-    // Rcpp::traits::input_parameter< int >::type niter(niterSEXP);
-    // Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
-    // Rcpp::traits::input_parameter< double >::type beta1(beta1SEXP);
-    // Rcpp::traits::input_parameter< double >::type beta2(beta2SEXP);
-    // Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
-    // Rcpp::traits::input_parameter< double >::type tolerance(toleranceSEXP);
-    // Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
-    int nx = 3, np = 4, nc = 2;
-    cout << "HI" << endl;
+    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type FW(FWSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type FS(FSSEXP);
+    Rcpp::traits::input_parameter< int >::type niter(niterSEXP);
+    Rcpp::traits::input_parameter< double >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< double >::type beta1(beta1SEXP);
+    Rcpp::traits::input_parameter< double >::type beta2(beta2SEXP);
+    Rcpp::traits::input_parameter< double >::type epsilon(epsilonSEXP);
+    Rcpp::traits::input_parameter< double >::type tolerance(toleranceSEXP);
+    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
+    Rcpp::traits::input_parameter< bool >::type keep(keepSEXP);
     NumericMatrix FC = makeFC(np, nc, ptrP, indX, Y);
-    cout << "HI" << endl;
     NumericMatrix P(nx, nc);
-    cout << "HI" << endl;
-    cout << nx << " " << np << " " << nc << endl;
-    cout << FC << endl;
-    cout << "HI" << endl;
     NumericMatrix meanGrad(np, nc);
-    cout << "HI" << endl;
     NumericMatrix varGrad(np, nc);
-    cout << "HI" << endl;
     NumericMatrix maxVarGrad(np, nc);
-    cout << "HI" << endl;
-    // rcpp_result_gen = Rcpp::wrap(_C_me(nx, np, nc, ptrX, indP, ptrP, indX, Y, lambda, alpha, FW, FS, niter, tolerance, eta, beta1, beta2, epsilon, verbose, FC, P, meanGrad, varGrad, maxVarGrad));
-    // cout << "HI" << endl;
-    // return rcpp_result_gen;
+    rcpp_result_gen = Rcpp::wrap(_C_me(nx, np, nc, ptrX, indP, ptrP, indX, Y, lambda, alpha, FW, FS, niter, tolerance, eta, beta1, beta2, epsilon, verbose, FC, P, meanGrad, varGrad, maxVarGrad, keep));
+    return rcpp_result_gen;
 END_RCPP
 }
 

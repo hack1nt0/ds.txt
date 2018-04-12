@@ -17,7 +17,7 @@ END_RCPP
 
 RcppExport SEXP C_cv_me(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 RcppExport SEXP C_dtm(SEXP, SEXP, SEXP, SEXP, SEXP);
-RcppExport SEXP C_me(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+RcppExport SEXP C_me(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 RcppExport SEXP C_new_adjacent_list_dgCMatrix(SEXP, SEXP);
 RcppExport SEXP C_new_adjacent_list_integer(SEXP, SEXP);
 RcppExport SEXP C_update_dtm_subset(SEXP);
@@ -26,7 +26,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_ds_txt_rcpp_hello", (DL_FUNC) &_ds_txt_rcpp_hello, 0},
     {"C_cv_me",                       (DL_FUNC) &C_cv_me,                       20},
     {"C_dtm",                         (DL_FUNC) &C_dtm,                          5},
-    {"C_me",                          (DL_FUNC) &C_me,                          19},
+    {"C_me",                          (DL_FUNC) &C_me,                          20},
     {"C_new_adjacent_list_dgCMatrix", (DL_FUNC) &C_new_adjacent_list_dgCMatrix,  2},
     {"C_new_adjacent_list_integer",   (DL_FUNC) &C_new_adjacent_list_integer,    2},
     {"C_update_dtm_subset",           (DL_FUNC) &C_update_dtm_subset,            1},
